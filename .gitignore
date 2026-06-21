@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Test and coverage output
+coverage/
+.nyc_output/
+
+# Local runtime data
+tmp/
+*.sqlite
+*.sqlite3
