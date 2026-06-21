@@ -1,26 +1,57 @@
 # Requirements
 
-This file will hold the product and technical requirements for the ServiceNow exam practice app.
+This file tracks the product and technical direction for the CIS-DF Quest app.
 
 ## Product Goals
 
-- Provide certification-focused practice for ServiceNow learners.
-- Make it easy to identify weak areas before taking an official exam.
-- Support realistic exam practice flows and lightweight study review.
+- Provide certification-focused practice for ServiceNow CIS-Data Foundation learners.
+- Make study sessions feel game-like without making exam preparation less serious.
+- Support flashcard recall, guided practice, and realistic exam-style attempts.
+- Use PDF question sources, with review before questions are published.
+
+## First Exam Scope
+
+- Exam: CIS-DF
+- Name: Certified Implementation Specialist - Data Foundations
+- Source: user-provided PDF
+- PDF metadata observed: 74 pages, 77 total questions listed
+
+## MVP Modes
+
+- Quest Cards
+  - Flip/reveal answer flow
+  - XP reward for review activity
+  - Marking and confidence scoring later
+- Practice Arena
+  - Immediate answer checking
+  - Explanation after each answer
+  - Streak and hearts feedback
+- Exam Trial
+  - Answer all questions before submission
+  - Results at the end
+  - Review notes after submission
+
+## Game-Like UI Direction
+
+- Player stats: XP, streak, hearts, rank
+- Quest language instead of dry quiz language
+- Clear answer states for correct, incorrect, selected, and unanswered
+- Compact dashboard-like layout suitable for repeated study
+- Mobile-friendly controls for short study sessions
 
 ## Open Questions
 
-- Which ServiceNow certifications should be supported first?
-- Should the app be single-user, multi-user, or admin-managed?
-- Should questions be imported from files, entered through an admin UI, or both?
-- Should practice work offline, online, or both?
-- What authentication, payment, or access-control model is needed?
-- What deployment target should be used?
+- Should users have accounts in v1, or should progress stay local at first?
+- Should PDF imports be admin-only?
+- Should the PDF source be stored in the app, or only extracted question data?
+- Should questions support multiple correct answers?
+- Should explanations come from the PDF, be manually written, or be generated and reviewed?
+- What pass mark and time limit should the CIS-DF exam simulation use?
 
 ## Future Decisions
 
-- Frontend framework
 - Backend framework
-- Database
+- Database and persistence model
 - Question import/export format
+- Authentication and roles
 - Hosting and deployment strategy

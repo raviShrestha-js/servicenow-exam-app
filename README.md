@@ -1,24 +1,38 @@
-# ServiceNow Exam Practice App
+# CIS-DF Quest
 
-A practice app for ServiceNow certification exam preparation.
+A gamified practice app for the ServiceNow Certified Implementation Specialist - Data Foundations exam.
 
 ## Purpose
 
-This app will help learners prepare for ServiceNow certifications through structured practice questions, review workflows, and progress tracking.
+This app helps ServiceNow professionals prepare for CIS-DF through flashcards, guided practice, and exam-style sessions.
 
 ## Status
 
-Repository initialized. Detailed product and technical requirements will be added next.
+First playable frontend scaffold in progress.
 
-## Planned Requirements Areas
+## Stack
 
-- Certification and exam catalogue
-- Practice question bank
-- Timed exam simulations
-- Immediate answer review and explanations
-- Progress, scoring, and weak-area tracking
-- Admin workflow for managing questions and certifications
+- React for interactive study modes and stateful quiz flows
+- TypeScript for safer question and session data
+- Vite for fast local development and builds
+- Lucide React for interface icons
+- Plain CSS for a custom game-like visual style
+
+This starts as a frontend-only app so the learning experience can be designed quickly. A backend can be added later for accounts, saved progress, admin review, and PDF question imports.
+
+## Product Modes
+
+- Quest Cards: flashcard-style recall practice
+- Practice Arena: answer one question at a time with immediate feedback
+- Exam Trial: exam-style run with results shown at the end
+
+## PDF Import Direction
+
+The attached CIS-DF PDF is text-readable but has copy restrictions. The production import flow should extract candidate questions, then require admin review before publishing them to learners.
 
 ## Development
 
-The application stack has not been selected yet. Once requirements are provided, this repository can be expanded with the appropriate frontend, backend, database, and deployment setup.
+```bash
+npm install
+npm run dev
+```
