@@ -20,7 +20,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { examMeta, questions, type Question } from "./questions";
 
 type Screen = "home" | "cards" | "practice" | "exam" | "results" | "import";
@@ -55,6 +55,13 @@ const modeConfig: Record<StudyMode, ModeConfig> = {
   },
 };
 
+const screens = new Set<Screen>(["home", "cards", "practice", "exam", "results", "import"]);
+
+function getHashScreen(): Screen {
+  const hash = window.location.hash.replace("#", "") as Screen;
+  return screens.has(hash) ? hash : "home";
+}
+
 function getRank(score: number) {
   if (score >= 90) return "Legend";
   if (score >= 75) return "Ready";
@@ -74,7 +81,7 @@ function arraysMatch(left: number[] = [], right: number[] = []) {
 }
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>(getHashScreen);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [answers, setAnswers] = useState<AnswerState>({});
@@ -93,8 +100,31 @@ export function App() {
   const score = percent(correctCount, questions.length);
   const domains = Array.from(new Set(questions.map((question) => question.domain)));
 
-  function startMode(nextScreen: StudyMode) {
+  useEffect(() => {
+    function syncHash() {
+      const nextScreen = getHashScreen();
+      setScreen(nextScreen);
+      setIndex(0);
+      setRevealed(false);
+      setCheckedPractice(false);
+      if (nextScreen === "cards" || nextScreen === "practice" || nextScreen === "exam") {
+        setAnswers({});
+        setStreak(0);
+        setHearts(3);
+      }
+    }
+
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
+  function navigate(nextScreen: Screen) {
+    window.location.hash = nextScreen === "home" ? "" : nextScreen;
     setScreen(nextScreen);
+  }
+
+  function startMode(nextScreen: StudyMode) {
+    navigate(nextScreen);
     setIndex(0);
     setRevealed(false);
     setAnswers({});
@@ -110,7 +140,7 @@ export function App() {
   }
 
   function goHome() {
-    setScreen("home");
+    navigate("home");
     setRevealed(false);
     setCheckedPractice(false);
   }
@@ -150,7 +180,7 @@ export function App() {
   }
 
   function finishExam() {
-    setScreen("results");
+    navigate("results");
     setXp((current) => current + correctCount * 25);
   }
 
@@ -159,7 +189,7 @@ export function App() {
       <AppHeader
         currentScreen={screen}
         onHome={goHome}
-        onImport={() => setScreen("import")}
+        onImport={() => navigate("import")}
         xp={xp}
         streak={streak}
         hearts={hearts}
@@ -167,7 +197,7 @@ export function App() {
       />
 
       {screen === "home" && (
-        <HomeScreen domains={domains} onStart={startMode} onImport={() => setScreen("import")} />
+        <HomeScreen domains={domains} />
       )}
 
       {screen === "cards" && (
@@ -253,7 +283,7 @@ export function App() {
       )}
 
       {screen === "results" && (
-        <ResultsScreen correct={correctCount} score={score} onReview={() => setScreen("exam")} onHome={goHome} />
+        <ResultsScreen correct={correctCount} score={score} onReview={() => navigate("exam")} onHome={goHome} />
       )}
 
       {screen === "import" && <ImportScreen onBack={goHome} />}
@@ -318,15 +348,7 @@ function AppHeader({
   );
 }
 
-function HomeScreen({
-  domains,
-  onStart,
-  onImport,
-}: {
-  domains: string[];
-  onStart: (screen: StudyMode) => void;
-  onImport: () => void;
-}) {
+function HomeScreen({ domains }: { domains: string[] }) {
   return (
     <section className="home-screen">
       <div className="mission-hero">
@@ -336,14 +358,14 @@ function HomeScreen({
           A focused CIS-Data Foundation trainer with separate spaces for recall, practice, and exam simulation.
         </p>
         <div className="hero-actions">
-          <button className="primary-button" type="button" onClick={() => onStart("practice")}>
+          <a className="primary-button" href="#practice">
             <Play aria-hidden="true" />
             Continue Training
-          </button>
-          <button className="secondary-button" type="button" onClick={onImport}>
+          </a>
+          <a className="secondary-button" href="#import">
             <Upload aria-hidden="true" />
             Open PDF Lab
-          </button>
+          </a>
         </div>
       </div>
 
@@ -351,7 +373,7 @@ function HomeScreen({
         {(Object.keys(modeConfig) as StudyMode[]).map((mode) => {
           const Icon = modeConfig[mode].icon;
           return (
-            <button className="mission-card" key={mode} type="button" onClick={() => onStart(mode)}>
+            <a className="mission-card" key={mode} href={`#${mode}`}>
               <span className="mission-icon">
                 <Icon aria-hidden="true" />
               </span>
@@ -360,7 +382,7 @@ function HomeScreen({
                 <small>{modeConfig[mode].intro}</small>
               </span>
               <b>{modeConfig[mode].cta}</b>
-            </button>
+            </a>
           );
         })}
       </div>
@@ -434,7 +456,7 @@ function Flashcard({
       {revealed ? (
         <div className="answer-reveal">
           <strong>{question.correctOptions.map((optionIndex) => question.options[optionIndex]).join(", ")}</strong>
-          <p>{question.explanation}</p>
+          <ExplanationText lines={question.explanation} />
         </div>
       ) : (
         <button className="primary-button" type="button" onClick={onReveal}>
@@ -491,10 +513,20 @@ function QuestionPanel({
       {showFeedback && (
         <div className="feedback-box">
           <strong>{isCorrectAnswer ? "Correct" : "Review this"}</strong>
-          <p>{question.explanation}</p>
+          <ExplanationText lines={question.explanation} />
         </div>
       )}
     </article>
+  );
+}
+
+function ExplanationText({ lines }: { lines: string[] }) {
+  return (
+    <div className="explanation-text">
+      {lines.map((line, index) => (
+        <p key={`${index}-${line.slice(0, 20)}`}>{line}</p>
+      ))}
+    </div>
   );
 }
 

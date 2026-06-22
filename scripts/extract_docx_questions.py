@@ -19,7 +19,107 @@ def clean_text(value: str) -> str:
     value = value.replace("\u2014", " - ")
     value = value.replace("\u2013", " - ")
     value = re.sub(r"(?<=[a-z0-9)])(?=[A-Z])", " ", value)
+    value = re.sub(r"(?<=\))(?=[a-z])", " ", value)
+    value = re.sub(r"(?<=[a-z])(?=\()", " ", value)
+    value = re.sub(r"(?<=\))(?=[A-Z])", " ", value)
     value = value.replace("SERVICE_NOW_TOKEN", "ServiceNow")
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
+
+
+def polish_text(value: str) -> str:
+    replacements = {
+        "aresynced": "are synced",
+        "aretrue": "are true",
+        "areshown": "are shown",
+        "areshown": "are shown",
+        "areincluded": "are included",
+        "offeringthat": "offering that",
+        "Ruleswere": "Rules were",
+        "SCCMfor": "SCCM for",
+        "Altiriscan": "Altiris can",
+        "SCCMinto": "SCCM into",
+        "ServiceNowcan": "ServiceNow can",
+        "SCCMcan": "SCCM can",
+        "ofreconciliation": "of reconciliation",
+        "priorityin": "priority in",
+        "rules,lower": "rules, lower",
+        "hashigher": "has higher",
+        "can update": "can update",
+        "can insert": "can insert",
+        "lowest priority": "lowest priority",
+        "anauthorized": "an authorized",
+        "Itcan": "It can",
+        "recordsinto": "records into",
+        "affectsupdates": "affects updates",
+        "doesnothave": "does not have",
+        "Ahigher": "A higher",
+        "tosynchronize": "to synchronize",
+        "attributesto": "attributes to",
+        "influenceoperational": "influence operational",
+        "Groupand": "Group and",
+        "Remediatorto": "Remediator to",
+        "Remediatoris": "Remediator is",
+        "datafrom": "data from",
+        "thatautomated": "that automated",
+        "containvaluable": "contain valuable",
+        "Unified Mapto": "Unified Map to",
+        "tofilter": "to filter",
+        "thefilter": "the filter",
+        "Rulesare": "Rules are",
+        "Typeswithin": "Types within",
+        "Rulewizard": "Rule wizard",
+        "actionshould": "action should",
+        "anarchive": "an archive",
+        "based on Dynamic CI Groupsto": "based on Dynamic CI Groups to",
+        "Foundation sc apability": "Foundations capability",
+        "Foundationscapability": "Foundations capability",
+        "synchronizeoperational": "synchronize operational",
+        "attributes to": "attributes to",
+        "operationalownership": "operational ownership",
+        "The Support Groupdefines": "The Support Group defines",
+        "The Managed by Grouprepresents": "The Managed by Group represents",
+        "B (Managed by Group)and": "B (Managed by Group) and",
+        "Data Certificationand": "Data Certification and",
+        "Attestationpolicies": "Attestation policies",
+        "The Duplicate CI Remediatorto": "The Duplicate CI Remediator to",
+        "thefirst": "the first",
+        "the Main CIis": "the Main CI is",
+        "Whichattributes": "Which attributes",
+        "themost": "the most",
+        "alonger": "a longer",
+        "themost relationships": "the most relationships",
+        "abusiness": "a business",
+        "Oldest Createdand": "Oldest Created and",
+        "Whichscorecard": "Which scorecard",
+        "Duplicate CI,Orphan CI,": "Duplicate CI, Orphan CI,",
+        "Stale CImetrics": "Stale CI metrics",
+        "Health Dashboardin": "Health Dashboard in",
+        "Duplicate CIs,Orphan CIs,": "Duplicate CIs, Orphan CIs,",
+        "data quality for CIsare": "data quality for CIs are",
+        "InServiceNow": "In ServiceNow",
+        "inServiceNow": "in ServiceNow",
+        "ServiceNowis": "ServiceNow is",
+        "CMDB Data Managerin": "CMDB Data Manager in",
+        "Linux Serversin": "Linux Servers in",
+        "havenot": "have not",
+        "Whichrecommended": "Which recommended",
+        "Archive policiesare": "Archive policies are",
+        "CI lifecycle cleanupbased": "CI lifecycle cleanup based",
+        "Linux Server CIsthat": "Linux Server CIs that",
+        "Creating abusiness": "Creating a business",
+        "Ascheduled": "A scheduled",
+        "alean": "a lean",
+        "Option Dcorrectly": "Option D correctly",
+    }
+    for source, target in replacements.items():
+        value = value.replace(source, target)
+
+    value = re.sub(r"\b([A-Z][A-Za-z]+)\(Option", r"\1 (Option", value)
+    value = value.replace("?(Choose", "? (Choose")
+    value = re.sub(r"\b([a-z]{3,})(requires|tracks|validates|confirms|represents|defines|supports|allows|indicates|signal|signals|lack|lacks|have|has|can|cannot|does|do|is|are)\b", r"\1 \2", value)
+    value = re.sub(r"\b(to|for|from|with|into|against|during|while|because|where|when|what|which|that|than|and|or|but|not)([A-Z][a-z])", r"\1 \2", value)
+    value = re.sub(r",(?=[A-Za-z])", ", ", value)
     value = re.sub(r"\s+", " ", value)
     return value.strip()
 
@@ -84,7 +184,7 @@ def parse_segment(question_number: int, segment: list[str]) -> dict | None:
 
     before_answer = segment[1:answer_index] if header else segment[:answer_index]
     before_answer = [
-        clean_text(text)
+        polish_text(clean_text(text))
         for text in before_answer
         if clean_text(text) and not re.fullmatch(r"\(Choose\s+(two|\d+)\s*(options?)?\)", clean_text(text), re.I)
     ]
@@ -104,8 +204,12 @@ def parse_segment(question_number: int, segment: list[str]) -> dict | None:
     if header_prompt:
         prompt_lines.insert(0, header_prompt)
 
-    prompt = clean_text(" ".join(prompt_lines))
-    explanation = clean_text(" ".join(explanation_lines))
+    prompt = polish_text(clean_text(" ".join(prompt_lines)))
+    explanation = [
+        polish_text(clean_text(line))
+        for line in explanation_lines
+        if polish_text(clean_text(line))
+    ]
 
     if not prompt or not explanation or any(not option for option in options):
         return None
@@ -133,7 +237,7 @@ def to_ts(question_bank: list[dict], unsupported: list[int]) -> str:
   prompt: string;
   options: string[];
   correctOptions: number[];
-  explanation: string;
+  explanation: string[];
 }};
 
 export const questions: Question[] = {payload};
