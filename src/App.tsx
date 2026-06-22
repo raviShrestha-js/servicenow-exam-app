@@ -42,10 +42,10 @@ const modeConfig: Record<StudyMode, ModeConfig> = {
     cta: "Start Cards",
   },
   practice: {
-    label: "Practice Battle",
+    label: "Practice Exam",
     intro: "Answer, check instantly, and learn from every miss while keeping your streak.",
     icon: Swords,
-    cta: "Enter Battle",
+    cta: "Start Practice",
   },
   exam: {
     label: "Exam Trial",
@@ -96,9 +96,11 @@ export function App() {
     () => questions.filter((question) => arraysMatch(answers[question.id], question.correctOptions)).length,
     [answers],
   );
-  const answeredCount = Object.values(answers).filter((answer) => answer && answer.length > 0).length;
+  const answeredCount = questions.filter((question) => (answers[question.id] ?? []).length > 0).length;
   const score = percent(correctCount, questions.length);
   const domains = Array.from(new Set(questions.map((question) => question.domain)));
+  const isPracticeCorrect = arraysMatch(selectedAnswers, activeQuestion.correctOptions);
+  const canMoveNext = index < questions.length - 1;
 
   useEffect(() => {
     function syncHash() {
@@ -184,6 +186,14 @@ export function App() {
     setXp((current) => current + correctCount * 25);
   }
 
+  function continuePractice() {
+    if (canMoveNext) {
+      move(1);
+      return;
+    }
+    goHome();
+  }
+
   return (
     <main className="app-shell">
       <AppHeader
@@ -205,8 +215,11 @@ export function App() {
           title="Flashcard Quest"
           subtitle="One idea at a time. Reveal the answer only after you commit mentally."
           answeredCount={answeredCount}
+          index={index}
+          answers={answers}
           onBack={goHome}
           onReset={resetCurrentRun}
+          onJump={setIndex}
         >
           <Flashcard
             question={activeQuestion}
@@ -217,17 +230,20 @@ export function App() {
               setXp((current) => current + 10);
             }}
           />
-          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+          <QuestionControls index={index} onMove={move} />
         </StudyShell>
       )}
 
       {screen === "practice" && (
         <StudyShell
-          title="Practice Battle"
+          title="Practice Exam"
           subtitle="Choose an answer, check it, then move on with the lesson fresh in your head."
           answeredCount={answeredCount}
+          index={index}
+          answers={answers}
           onBack={goHome}
           onReset={resetCurrentRun}
+          onJump={setIndex}
         >
           <QuestionPanel
             question={activeQuestion}
@@ -237,17 +253,29 @@ export function App() {
             onChoose={chooseAnswer}
           />
           <div className="screen-actions">
-            <button
-              className="primary-button"
-              type="button"
-              onClick={checkPracticeAnswer}
-              disabled={selectedAnswers.length === 0 || checkedPractice}
-            >
-              <CheckCircle2 aria-hidden="true" />
-              Check Answer
-            </button>
+            {checkedPractice && (
+              <span className={isPracticeCorrect ? "result-chip correct" : "result-chip wrong"}>
+                {isPracticeCorrect ? "Correct" : "Review the explanation"}
+              </span>
+            )}
+            {!checkedPractice ? (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={checkPracticeAnswer}
+                disabled={selectedAnswers.length === 0}
+              >
+                <CheckCircle2 aria-hidden="true" />
+                Check Answer
+              </button>
+            ) : (
+              <button className="primary-button" type="button" onClick={continuePractice}>
+                {canMoveNext ? "Next Question" : "Finish Practice"}
+                <ChevronRight aria-hidden="true" />
+              </button>
+            )}
           </div>
-          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+          <QuestionControls index={index} onMove={move} />
         </StudyShell>
       )}
 
@@ -256,8 +284,11 @@ export function App() {
           title="Exam Trial"
           subtitle="No answer feedback during the trial. Answer every question, then submit."
           answeredCount={answeredCount}
+          index={index}
+          answers={answers}
           onBack={goHome}
           onReset={resetCurrentRun}
+          onJump={setIndex}
         >
           <QuestionPanel
             question={activeQuestion}
@@ -278,12 +309,12 @@ export function App() {
               Submit Trial
             </button>
           </div>
-          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+          <QuestionControls index={index} onMove={move} />
         </StudyShell>
       )}
 
       {screen === "results" && (
-        <ResultsScreen correct={correctCount} score={score} onReview={() => navigate("exam")} onHome={goHome} />
+        <ResultsScreen correct={correctCount} score={score} onRetake={() => startMode("exam")} onHome={goHome} />
       )}
 
       {screen === "import" && <ImportScreen onBack={goHome} />}
@@ -310,7 +341,7 @@ function AppHeader({
 }) {
   const navItems: Array<{ screen: Screen; label: string; action: () => void }> = [
     { screen: "home", label: "Missions", action: onHome },
-    { screen: "import", label: "PDF Lab", action: onImport },
+    { screen: "import", label: "Import Lab", action: onImport },
   ];
 
   return (
@@ -327,14 +358,14 @@ function AppHeader({
 
       <nav className="top-nav" aria-label="Primary">
         {navItems.map((item) => (
-          <button
+          <a
             key={item.screen}
             className={currentScreen === item.screen ? "active" : ""}
-            type="button"
+            href={item.screen === "home" ? "#" : `#${item.screen}`}
             onClick={item.action}
           >
             {item.label}
-          </button>
+          </a>
         ))}
       </nav>
 
@@ -364,7 +395,7 @@ function HomeScreen({ domains }: { domains: string[] }) {
           </a>
           <a className="secondary-button" href="#import">
             <Upload aria-hidden="true" />
-            Open PDF Lab
+            Open Import Lab
           </a>
         </div>
       </div>
@@ -400,15 +431,21 @@ function StudyShell({
   title,
   subtitle,
   answeredCount,
+  index,
+  answers,
   onBack,
   onReset,
+  onJump,
   children,
 }: {
   title: string;
   subtitle: string;
   answeredCount: number;
+  index: number;
+  answers: AnswerState;
   onBack: () => void;
   onReset: () => void;
+  onJump: (index: number) => void;
   children: ReactNode;
 }) {
   return (
@@ -429,11 +466,14 @@ function StudyShell({
         </button>
       </div>
 
-      <div className="run-progress">
+      <div className="run-progress" aria-label={`${answeredCount} of ${questions.length} answered`}>
         <span style={{ width: `${percent(answeredCount, questions.length)}%` }} />
       </div>
 
-      <div className="stage-panel">{children}</div>
+      <div className="study-layout">
+        <div className="stage-panel">{children}</div>
+        <QuestionPalette index={index} onJump={onJump} answered={answers} />
+      </div>
     </section>
   );
 }
@@ -533,12 +573,12 @@ function ExplanationText({ lines }: { lines: string[] }) {
 function ResultsScreen({
   correct,
   score,
-  onReview,
+  onRetake,
   onHome,
 }: {
   correct: number;
   score: number;
-  onReview: () => void;
+  onRetake: () => void;
   onHome: () => void;
 }) {
   return (
@@ -552,9 +592,9 @@ function ResultsScreen({
         You answered {correct} of {questions.length} correctly. Review the question bank, then run another trial.
       </p>
       <div className="hero-actions">
-        <button className="primary-button" type="button" onClick={onReview}>
+        <button className="primary-button" type="button" onClick={onRetake}>
           <ShieldCheck aria-hidden="true" />
-          Review Answers
+          Retake Trial
         </button>
         <button className="secondary-button" type="button" onClick={onHome}>
           <ArrowLeft aria-hidden="true" />
@@ -574,14 +614,14 @@ function ImportScreen({ onBack }: { onBack: () => void }) {
       </button>
       <div className="import-panel">
         <FileSearch aria-hidden="true" />
-        <p className="eyebrow">PDF Lab</p>
+        <p className="eyebrow">Import Lab</p>
         <h1>Question import will live here.</h1>
         <p>
-          The attached CIS-DF PDF is readable enough to extract candidate questions, but the app should review
-          every parsed question before publishing it into the playable bank.
+          The CIS-DF DOCX can generate playable multiple-choice questions. Drag-and-drop questions need a
+          visual review step before they can be published into the bank.
         </p>
         <div className="import-steps">
-          <span>1. Extract PDF text</span>
+          <span>1. Extract DOCX text</span>
           <span>2. Review questions</span>
           <span>3. Publish to modes</span>
         </div>
@@ -600,41 +640,61 @@ function QuestionMeta({ question, questionNumber }: { question: Question; questi
   );
 }
 
-function QuestionPager({
+function QuestionControls({
   index,
   onMove,
+}: {
+  index: number;
+  onMove: (direction: -1 | 1) => void;
+}) {
+  return (
+    <nav className="question-controls" aria-label="Question navigation">
+      <button type="button" onClick={() => onMove(-1)} disabled={index === 0}>
+        <ChevronLeft aria-hidden="true" />
+        Previous
+      </button>
+      <span>Question {index + 1} of {questions.length}</span>
+      <button type="button" onClick={() => onMove(1)} disabled={index === questions.length - 1}>
+        Next
+        <ChevronRight aria-hidden="true" />
+      </button>
+    </nav>
+  );
+}
+
+function QuestionPalette({
+  index,
   onJump,
   answered,
 }: {
   index: number;
-  onMove: (direction: -1 | 1) => void;
   onJump: (index: number) => void;
   answered: AnswerState;
 }) {
   return (
-    <nav className="question-pager" aria-label="Question navigation">
-      <button type="button" onClick={() => onMove(-1)} disabled={index === 0} title="Previous question">
-        <ChevronLeft aria-hidden="true" />
-      </button>
-      <div className="dot-track">
+    <aside className="question-palette" aria-label="Question palette">
+      <div>
+        <p className="eyebrow">Questions</p>
+        <strong>{questions.length} total</strong>
+      </div>
+      <div className="palette-grid">
         {questions.map((question, questionIndex) => (
           <button
             key={question.id}
             className={[
-              "question-dot",
+              "question-tile",
               questionIndex === index ? "active" : "",
-              answered[question.id] !== undefined ? "answered" : "",
+              (answered[question.id] ?? []).length > 0 ? "answered" : "",
             ].join(" ")}
             type="button"
             onClick={() => onJump(questionIndex)}
-            aria-label={`Go to question ${questionIndex + 1}`}
-          />
+            aria-label={`Go to question ${questionIndex + 1}${(answered[question.id] ?? []).length > 0 ? ", answered" : ""}`}
+          >
+            {questionIndex + 1}
+          </button>
         ))}
       </div>
-      <button type="button" onClick={() => onMove(1)} disabled={index === questions.length - 1} title="Next question">
-        <ChevronRight aria-hidden="true" />
-      </button>
-    </nav>
+    </aside>
   );
 }
 
