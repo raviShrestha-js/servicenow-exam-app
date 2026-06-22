@@ -18,7 +18,7 @@ First playable frontend scaffold in progress.
 - Lucide React for interface icons
 - Plain CSS for a custom game-like visual style
 
-This starts as a frontend-only app so the learning experience can be designed quickly. A backend can be added later for accounts, saved progress, admin review, and PDF question imports.
+This starts as a frontend-only app so the learning experience can be designed quickly. A backend can be added later for accounts, saved progress, admin review, and DOCX/PDF question imports.
 
 ## Product Modes
 
@@ -26,13 +26,19 @@ This starts as a frontend-only app so the learning experience can be designed qu
 - Practice Arena: answer one question at a time with immediate feedback
 - Exam Trial: exam-style run with results shown at the end
 
-## PDF Import Direction
+## Question Import Direction
 
-The attached CIS-DF PDF is text-readable but has copy restrictions. The production import flow should extract candidate questions, then require admin review before publishing them to learners.
+The CIS-DF DOCX source has been converted into the app question bank. The current extraction produces 69 playable multiple-choice questions. Eight drag-and-drop questions are flagged for later visual review because their mappings are embedded visually rather than as normal text.
 
 ## Development
 
 ```bash
 npm install
 npm run dev
+```
+
+## Regenerate Questions
+
+```bash
+python3 scripts/extract_docx_questions.py "/path/to/ServiceNow-CIS-DF (2).docx" src/questions.ts
 ```

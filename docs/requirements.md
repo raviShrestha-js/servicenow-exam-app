@@ -7,14 +7,16 @@ This file tracks the product and technical direction for the CIS-DF Quest app.
 - Provide certification-focused practice for ServiceNow CIS-Data Foundation learners.
 - Make study sessions feel game-like without making exam preparation less serious.
 - Support flashcard recall, guided practice, and realistic exam-style attempts.
-- Use PDF question sources, with review before questions are published.
+- Use DOCX/PDF question sources, with review before questions are published.
 
 ## First Exam Scope
 
 - Exam: CIS-DF
 - Name: Certified Implementation Specialist - Data Foundations
-- Source: user-provided PDF
-- PDF metadata observed: 74 pages, 77 total questions listed
+- Source: user-provided DOCX converted from the original PDF
+- Source total: 77 questions
+- Playable now: 69 multiple-choice questions
+- Deferred: 8 drag-and-drop questions that need visual/manual mapping review
 
 ## MVP Modes
 
@@ -42,8 +44,8 @@ This file tracks the product and technical direction for the CIS-DF Quest app.
 ## Open Questions
 
 - Should users have accounts in v1, or should progress stay local at first?
-- Should PDF imports be admin-only?
-- Should the PDF source be stored in the app, or only extracted question data?
+- Should DOCX/PDF imports be admin-only?
+- Should the DOCX/PDF source be stored in the app, or only extracted question data?
 - Should questions support multiple correct answers?
 - Should explanations come from the PDF, be manually written, or be generated and reviewed?
 - What pass mark and time limit should the CIS-DF exam simulation use?

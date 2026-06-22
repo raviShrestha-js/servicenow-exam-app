@@ -1,14 +1,16 @@
 import {
+  ArrowLeft,
   BookOpen,
   Brain,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  FileSearch,
   Flame,
-  Gamepad2,
   Heart,
   Medal,
+  Play,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -18,22 +20,45 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { examMeta, questions, type Question } from "./questions";
 
-type Mode = "cards" | "practice" | "exam";
-type AnswerState = Record<string, number | undefined>;
+type Screen = "home" | "cards" | "practice" | "exam" | "results" | "import";
+type StudyMode = Exclude<Screen, "home" | "results" | "import">;
+type AnswerState = Record<string, number[] | undefined>;
 
-const modeCopy: Record<Mode, { label: string; title: string; icon: typeof Sparkles }> = {
-  cards: { label: "Quest Cards", title: "Flip cards, rate your recall, keep your streak alive.", icon: Sparkles },
-  practice: { label: "Practice Arena", title: "Answer, check instantly, and learn from each miss.", icon: Swords },
-  exam: { label: "Exam Trial", title: "No hints. Submit at the end and earn your readiness badge.", icon: ShieldCheck },
+type ModeConfig = {
+  label: string;
+  intro: string;
+  icon: typeof Sparkles;
+  cta: string;
 };
 
-function getRank(percent: number) {
-  if (percent >= 90) return "Legend";
-  if (percent >= 75) return "Ready";
-  if (percent >= 60) return "Close";
+const modeConfig: Record<StudyMode, ModeConfig> = {
+  cards: {
+    label: "Flashcard Quest",
+    intro: "Flip one card at a time and train recall before you touch the options.",
+    icon: Sparkles,
+    cta: "Start Cards",
+  },
+  practice: {
+    label: "Practice Battle",
+    intro: "Answer, check instantly, and learn from every miss while keeping your streak.",
+    icon: Swords,
+    cta: "Enter Battle",
+  },
+  exam: {
+    label: "Exam Trial",
+    intro: "No feedback until the end. Submit when every question is answered.",
+    icon: ShieldCheck,
+    cta: "Begin Trial",
+  },
+};
+
+function getRank(score: number) {
+  if (score >= 90) return "Legend";
+  if (score >= 75) return "Ready";
+  if (score >= 60) return "Close";
   return "Training";
 }
 
@@ -41,37 +66,53 @@ function percent(value: number, total: number) {
   return total === 0 ? 0 : Math.round((value / total) * 100);
 }
 
+function arraysMatch(left: number[] = [], right: number[] = []) {
+  if (left.length !== right.length) return false;
+  const normalizedLeft = [...left].sort((a, b) => a - b);
+  const normalizedRight = [...right].sort((a, b) => a - b);
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
 export function App() {
-  const [mode, setMode] = useState<Mode>("practice");
+  const [screen, setScreen] = useState<Screen>("home");
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [answers, setAnswers] = useState<AnswerState>({});
   const [checkedPractice, setCheckedPractice] = useState(false);
-  const [examSubmitted, setExamSubmitted] = useState(false);
   const [streak, setStreak] = useState(0);
   const [xp, setXp] = useState(120);
   const [hearts, setHearts] = useState(3);
 
   const activeQuestion = questions[index];
-  const selectedAnswer = answers[activeQuestion.id];
+  const selectedAnswers = answers[activeQuestion.id] ?? [];
   const correctCount = useMemo(
-    () => questions.filter((question) => answers[question.id] === question.correctOption).length,
+    () => questions.filter((question) => arraysMatch(answers[question.id], question.correctOptions)).length,
     [answers],
   );
-  const answeredCount = Object.values(answers).filter((answer) => answer !== undefined).length;
-  const scorePercent = percent(correctCount, questions.length);
+  const answeredCount = Object.values(answers).filter((answer) => answer && answer.length > 0).length;
+  const score = percent(correctCount, questions.length);
   const domains = Array.from(new Set(questions.map((question) => question.domain)));
 
-  function resetSession(nextMode = mode) {
-    setMode(nextMode);
+  function startMode(nextScreen: StudyMode) {
+    setScreen(nextScreen);
     setIndex(0);
     setRevealed(false);
     setAnswers({});
     setCheckedPractice(false);
-    setExamSubmitted(false);
     setStreak(0);
-    setXp(120);
     setHearts(3);
+  }
+
+  function resetCurrentRun() {
+    if (screen === "cards" || screen === "practice" || screen === "exam") {
+      startMode(screen);
+    }
+  }
+
+  function goHome() {
+    setScreen("home");
+    setRevealed(false);
+    setCheckedPractice(false);
   }
 
   function move(direction: -1 | 1) {
@@ -81,15 +122,25 @@ export function App() {
   }
 
   function chooseAnswer(question: Question, optionIndex: number) {
-    if (mode === "exam" && examSubmitted) return;
-    if (mode === "practice" && checkedPractice) return;
-    setAnswers((current) => ({ ...current, [question.id]: optionIndex }));
+    if (screen === "practice" && checkedPractice) return;
+    setAnswers((current) => {
+      const selected = current[question.id] ?? [];
+      if (question.correctOptions.length === 1) {
+        return { ...current, [question.id]: [optionIndex] };
+      }
+
+      const nextSelected = selected.includes(optionIndex)
+        ? selected.filter((answer) => answer !== optionIndex)
+        : [...selected, optionIndex];
+
+      return { ...current, [question.id]: nextSelected };
+    });
   }
 
   function checkPracticeAnswer() {
-    if (selectedAnswer === undefined) return;
+    if (selectedAnswers.length === 0) return;
     setCheckedPractice(true);
-    if (selectedAnswer === activeQuestion.correctOption) {
+    if (arraysMatch(selectedAnswers, activeQuestion.correctOptions)) {
       setStreak((current) => current + 1);
       setXp((current) => current + 35);
       return;
@@ -98,222 +149,297 @@ export function App() {
     setHearts((current) => Math.max(current - 1, 0));
   }
 
-  const ModeIcon = modeCopy[mode].icon;
+  function finishExam() {
+    setScreen("results");
+    setXp((current) => current + correctCount * 25);
+  }
 
   return (
     <main className="app-shell">
-      <section className="command-deck">
-        <div className="brand-lockup">
-          <div className="brand-mark">
-            <Gamepad2 aria-hidden="true" />
-          </div>
-          <div>
-            <p className="eyebrow">ServiceNow exam trainer</p>
-            <h1>CIS-DF Quest</h1>
-          </div>
-        </div>
+      <AppHeader
+        currentScreen={screen}
+        onHome={goHome}
+        onImport={() => setScreen("import")}
+        xp={xp}
+        streak={streak}
+        hearts={hearts}
+        rank={getRank(score)}
+      />
 
-        <div className="stats-strip" aria-label="Player progress">
-          <Stat icon={Flame} label="Streak" value={`${streak}`} />
-          <Stat icon={Star} label="XP" value={`${xp}`} />
-          <Stat icon={Heart} label="Hearts" value={`${hearts}`} />
-          <Stat icon={Medal} label="Rank" value={getRank(scorePercent)} />
-        </div>
-      </section>
+      {screen === "home" && (
+        <HomeScreen domains={domains} onStart={startMode} onImport={() => setScreen("import")} />
+      )}
 
-      <section className="hero-board">
-        <div className="exam-summary">
-          <p className="eyebrow">{examMeta.code}</p>
-          <h2>{examMeta.name}</h2>
-          <div className="mission-grid">
-            <Pill icon={BookOpen} text={`${questions.length} playable questions`} />
-            <Pill icon={Upload} text={`PDF source: ${examMeta.totalPdfQuestions} questions`} />
-            <Pill icon={Clock3} text="Exam timer ready" />
-          </div>
-        </div>
-        <div className="domain-map">
-          {domains.map((domain, domainIndex) => (
-            <span key={domain} className="domain-node" style={{ animationDelay: `${domainIndex * 90}ms` }}>
-              {domain}
-            </span>
-          ))}
-        </div>
-      </section>
+      {screen === "cards" && (
+        <StudyShell
+          title="Flashcard Quest"
+          subtitle="One idea at a time. Reveal the answer only after you commit mentally."
+          answeredCount={answeredCount}
+          onBack={goHome}
+          onReset={resetCurrentRun}
+        >
+          <Flashcard
+            question={activeQuestion}
+            questionNumber={index + 1}
+            revealed={revealed}
+            onReveal={() => {
+              setRevealed(true);
+              setXp((current) => current + 10);
+            }}
+          />
+          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+        </StudyShell>
+      )}
 
-      <section className="mode-tabs" aria-label="Study mode">
-        {(Object.keys(modeCopy) as Mode[]).map((modeKey) => {
-          const Icon = modeCopy[modeKey].icon;
-          return (
+      {screen === "practice" && (
+        <StudyShell
+          title="Practice Battle"
+          subtitle="Choose an answer, check it, then move on with the lesson fresh in your head."
+          answeredCount={answeredCount}
+          onBack={goHome}
+          onReset={resetCurrentRun}
+        >
+          <QuestionPanel
+            question={activeQuestion}
+            questionNumber={index + 1}
+            selectedAnswers={selectedAnswers}
+            showFeedback={checkedPractice}
+            onChoose={chooseAnswer}
+          />
+          <div className="screen-actions">
             <button
-              className={mode === modeKey ? "mode-tab active" : "mode-tab"}
-              key={modeKey}
+              className="primary-button"
               type="button"
-              onClick={() => resetSession(modeKey)}
-              title={modeCopy[modeKey].label}
+              onClick={checkPracticeAnswer}
+              disabled={selectedAnswers.length === 0 || checkedPractice}
             >
-              <Icon aria-hidden="true" />
-              <span>{modeCopy[modeKey].label}</span>
+              <CheckCircle2 aria-hidden="true" />
+              Check Answer
             </button>
-          );
-        })}
-      </section>
-
-      <section className="play-layout">
-        <aside className="side-panel">
-          <div className="panel-heading">
-            <ModeIcon aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Current mode</p>
-              <h3>{modeCopy[mode].label}</h3>
-            </div>
           </div>
-          <p>{modeCopy[mode].title}</p>
-          <div className="progress-rail">
-            <span style={{ width: `${percent(answeredCount, questions.length)}%` }} />
-          </div>
-          <p className="progress-copy">
-            {answeredCount} of {questions.length} answered
-          </p>
-          <button className="ghost-button" type="button" onClick={() => resetSession()}>
-            <RotateCcw aria-hidden="true" />
-            Reset run
-          </button>
-        </aside>
+          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+        </StudyShell>
+      )}
 
-        <section className="question-stage">
-          <div className="question-topline">
-            <span>Question {index + 1} / {questions.length}</span>
-            <span>{activeQuestion.domain}</span>
-            <span>{activeQuestion.difficulty}</span>
-          </div>
-
-          {mode === "cards" ? (
-            <Flashcard
-              question={activeQuestion}
-              revealed={revealed}
-              onReveal={() => {
-                setRevealed(true);
-                setXp((current) => current + 10);
-              }}
-            />
-          ) : (
-            <QuestionPanel
-              mode={mode}
-              question={activeQuestion}
-              selectedAnswer={selectedAnswer}
-              showFeedback={mode === "practice" ? checkedPractice : examSubmitted}
-              onChoose={chooseAnswer}
-            />
-          )}
-
-          {mode === "practice" && (
-            <div className="action-row">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={checkPracticeAnswer}
-                disabled={selectedAnswer === undefined || checkedPractice}
-              >
-                <CheckCircle2 aria-hidden="true" />
-                Check answer
-              </button>
-            </div>
-          )}
-
-          {mode === "exam" && !examSubmitted && (
-            <div className="action-row">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => setExamSubmitted(true)}
-                disabled={answeredCount < questions.length}
-              >
-                <Trophy aria-hidden="true" />
-                Submit exam
-              </button>
-            </div>
-          )}
-
-          {mode === "exam" && examSubmitted && (
-            <ResultBanner score={scorePercent} correct={correctCount} total={questions.length} />
-          )}
-
-          <nav className="pager" aria-label="Question navigation">
-            <button type="button" onClick={() => move(-1)} disabled={index === 0} title="Previous question">
-              <ChevronLeft aria-hidden="true" />
+      {screen === "exam" && (
+        <StudyShell
+          title="Exam Trial"
+          subtitle="No answer feedback during the trial. Answer every question, then submit."
+          answeredCount={answeredCount}
+          onBack={goHome}
+          onReset={resetCurrentRun}
+        >
+          <QuestionPanel
+            question={activeQuestion}
+            questionNumber={index + 1}
+            selectedAnswers={selectedAnswers}
+            showFeedback={false}
+            onChoose={chooseAnswer}
+          />
+          <div className="screen-actions split">
+            <span>{answeredCount === questions.length ? "Ready to submit" : `${questions.length - answeredCount} left`}</span>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={finishExam}
+              disabled={answeredCount < questions.length}
+            >
+              <Trophy aria-hidden="true" />
+              Submit Trial
             </button>
-            <div className="dot-track">
-              {questions.map((question, questionIndex) => (
-                <button
-                  key={question.id}
-                  className={[
-                    "question-dot",
-                    questionIndex === index ? "active" : "",
-                    answers[question.id] !== undefined ? "answered" : "",
-                  ].join(" ")}
-                  type="button"
-                  onClick={() => {
-                    setIndex(questionIndex);
-                    setRevealed(false);
-                    setCheckedPractice(false);
-                  }}
-                  aria-label={`Go to question ${questionIndex + 1}`}
-                />
-              ))}
-            </div>
-            <button type="button" onClick={() => move(1)} disabled={index === questions.length - 1} title="Next question">
-              <ChevronRight aria-hidden="true" />
-            </button>
-          </nav>
-        </section>
-      </section>
+          </div>
+          <QuestionPager index={index} onMove={move} onJump={setIndex} answered={answers} />
+        </StudyShell>
+      )}
+
+      {screen === "results" && (
+        <ResultsScreen correct={correctCount} score={score} onReview={() => setScreen("exam")} onHome={goHome} />
+      )}
+
+      {screen === "import" && <ImportScreen onBack={goHome} />}
     </main>
   );
 }
 
-function Stat({ icon: Icon, label, value }: { icon: typeof Flame; label: string; value: string }) {
+function AppHeader({
+  currentScreen,
+  onHome,
+  onImport,
+  xp,
+  streak,
+  hearts,
+  rank,
+}: {
+  currentScreen: Screen;
+  onHome: () => void;
+  onImport: () => void;
+  xp: number;
+  streak: number;
+  hearts: number;
+  rank: string;
+}) {
+  const navItems: Array<{ screen: Screen; label: string; action: () => void }> = [
+    { screen: "home", label: "Missions", action: onHome },
+    { screen: "import", label: "PDF Lab", action: onImport },
+  ];
+
   return (
-    <div className="stat">
-      <Icon aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
+    <header className="app-header">
+      <button className="brand-button" type="button" onClick={onHome}>
+        <span className="brand-mark">
+          <BookOpen aria-hidden="true" />
+        </span>
+        <span>
+          <strong>CIS-DF Quest</strong>
+          <small>ServiceNow Data Foundations</small>
+        </span>
+      </button>
+
+      <nav className="top-nav" aria-label="Primary">
+        {navItems.map((item) => (
+          <button
+            key={item.screen}
+            className={currentScreen === item.screen ? "active" : ""}
+            type="button"
+            onClick={item.action}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="player-bar" aria-label="Player status">
+        <PlayerStat icon={Flame} value={`${streak}`} label="Streak" />
+        <PlayerStat icon={Star} value={`${xp}`} label="XP" />
+        <PlayerStat icon={Heart} value={`${hearts}`} label="Hearts" />
+        <PlayerStat icon={Medal} value={rank} label="Rank" />
+      </div>
+    </header>
   );
 }
 
-function Pill({ icon: Icon, text }: { icon: typeof BookOpen; text: string }) {
+function HomeScreen({
+  domains,
+  onStart,
+  onImport,
+}: {
+  domains: string[];
+  onStart: (screen: StudyMode) => void;
+  onImport: () => void;
+}) {
   return (
-    <span className="info-pill">
-      <Icon aria-hidden="true" />
-      {text}
-    </span>
+    <section className="home-screen">
+      <div className="mission-hero">
+        <p className="eyebrow">{examMeta.code}</p>
+        <h1>Choose your training run.</h1>
+        <p className="hero-copy">
+          A focused CIS-Data Foundation trainer with separate spaces for recall, practice, and exam simulation.
+        </p>
+        <div className="hero-actions">
+          <button className="primary-button" type="button" onClick={() => onStart("practice")}>
+            <Play aria-hidden="true" />
+            Continue Training
+          </button>
+          <button className="secondary-button" type="button" onClick={onImport}>
+            <Upload aria-hidden="true" />
+            Open PDF Lab
+          </button>
+        </div>
+      </div>
+
+      <div className="mission-select">
+        {(Object.keys(modeConfig) as StudyMode[]).map((mode) => {
+          const Icon = modeConfig[mode].icon;
+          return (
+            <button className="mission-card" key={mode} type="button" onClick={() => onStart(mode)}>
+              <span className="mission-icon">
+                <Icon aria-hidden="true" />
+              </span>
+              <span>
+                <strong>{modeConfig[mode].label}</strong>
+                <small>{modeConfig[mode].intro}</small>
+              </span>
+              <b>{modeConfig[mode].cta}</b>
+            </button>
+          );
+        })}
+      </div>
+
+      <section className="intel-strip" aria-label="Exam setup">
+        <Intel icon={FileSearch} label="DOCX source" value={`${examMeta.totalSourceQuestions} questions`} />
+        <Intel icon={Clock3} label="Question bank" value={`${examMeta.playableQuestions} playable now`} />
+        <Intel icon={Brain} label="Domains" value={`${domains.length} mapped`} />
+      </section>
+    </section>
+  );
+}
+
+function StudyShell({
+  title,
+  subtitle,
+  answeredCount,
+  onBack,
+  onReset,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  answeredCount: number;
+  onBack: () => void;
+  onReset: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="study-screen">
+      <div className="screen-heading">
+        <button className="back-button" type="button" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" />
+          Missions
+        </button>
+        <div>
+          <p className="eyebrow">Active run</p>
+          <h1>{title}</h1>
+          <p>{subtitle}</p>
+        </div>
+        <button className="secondary-button compact" type="button" onClick={onReset}>
+          <RotateCcw aria-hidden="true" />
+          Reset
+        </button>
+      </div>
+
+      <div className="run-progress">
+        <span style={{ width: `${percent(answeredCount, questions.length)}%` }} />
+      </div>
+
+      <div className="stage-panel">{children}</div>
+    </section>
   );
 }
 
 function Flashcard({
   question,
+  questionNumber,
   revealed,
   onReveal,
 }: {
   question: Question;
+  questionNumber: number;
   revealed: boolean;
   onReveal: () => void;
 }) {
   return (
-    <article className={revealed ? "flashcard revealed" : "flashcard"}>
-      <div>
-        <p className="eyebrow">Memory gate</p>
-        <h2>{question.prompt}</h2>
-      </div>
+    <article className={revealed ? "focus-card revealed" : "focus-card"}>
+      <QuestionMeta question={question} questionNumber={questionNumber} />
+      <h2>{question.prompt}</h2>
       {revealed ? (
         <div className="answer-reveal">
-          <p className="correct-answer">{question.options[question.correctOption]}</p>
+          <strong>{question.correctOptions.map((optionIndex) => question.options[optionIndex]).join(", ")}</strong>
           <p>{question.explanation}</p>
         </div>
       ) : (
         <button className="primary-button" type="button" onClick={onReveal}>
-          <Brain aria-hidden="true" />
-          Reveal answer
+          <Sparkles aria-hidden="true" />
+          Reveal Answer
         </button>
       )}
     </article>
@@ -321,25 +447,31 @@ function Flashcard({
 }
 
 function QuestionPanel({
-  mode,
   question,
-  selectedAnswer,
+  questionNumber,
+  selectedAnswers,
   showFeedback,
   onChoose,
 }: {
-  mode: Mode;
   question: Question;
-  selectedAnswer: number | undefined;
+  questionNumber: number;
+  selectedAnswers: number[];
   showFeedback: boolean;
   onChoose: (question: Question, optionIndex: number) => void;
 }) {
+  const isCorrectAnswer = arraysMatch(selectedAnswers, question.correctOptions);
+
   return (
-    <article className="question-card">
+    <article className="focus-card">
+      <QuestionMeta question={question} questionNumber={questionNumber} />
       <h2>{question.prompt}</h2>
+      {question.correctOptions.length > 1 && (
+        <p className="selection-note">Choose {question.correctOptions.length} options.</p>
+      )}
       <div className="options-list">
         {question.options.map((option, optionIndex) => {
-          const isSelected = selectedAnswer === optionIndex;
-          const isCorrect = question.correctOption === optionIndex;
+          const isSelected = selectedAnswers.includes(optionIndex);
+          const isCorrect = question.correctOptions.includes(optionIndex);
           const stateClass = showFeedback && isCorrect ? " correct" : showFeedback && isSelected ? " wrong" : "";
           return (
             <button
@@ -349,7 +481,7 @@ function QuestionPanel({
               onClick={() => onChoose(question, optionIndex)}
             >
               <span>{String.fromCharCode(65 + optionIndex)}</span>
-              {option}
+              <strong>{option}</strong>
               {showFeedback && isCorrect && <CheckCircle2 aria-hidden="true" />}
               {showFeedback && isSelected && !isCorrect && <XCircle aria-hidden="true" />}
             </button>
@@ -358,7 +490,7 @@ function QuestionPanel({
       </div>
       {showFeedback && (
         <div className="feedback-box">
-          <strong>{mode === "exam" ? "Review note" : selectedAnswer === question.correctOption ? "Critical hit" : "Training note"}</strong>
+          <strong>{isCorrectAnswer ? "Correct" : "Review this"}</strong>
           <p>{question.explanation}</p>
         </div>
       )}
@@ -366,15 +498,130 @@ function QuestionPanel({
   );
 }
 
-function ResultBanner({ score, correct, total }: { score: number; correct: number; total: number }) {
+function ResultsScreen({
+  correct,
+  score,
+  onReview,
+  onHome,
+}: {
+  correct: number;
+  score: number;
+  onReview: () => void;
+  onHome: () => void;
+}) {
   return (
-    <div className="result-banner">
-      <Trophy aria-hidden="true" />
-      <div>
-        <p className="eyebrow">Exam result</p>
-        <h3>{score}% - {getRank(score)}</h3>
-        <p>{correct} correct answers out of {total}. Review missed questions, then run the trial again.</p>
+    <section className="results-screen">
+      <div className="result-medal">
+        <Trophy aria-hidden="true" />
       </div>
+      <p className="eyebrow">Trial Complete</p>
+      <h1>{score}% - {getRank(score)}</h1>
+      <p>
+        You answered {correct} of {questions.length} correctly. Review the question bank, then run another trial.
+      </p>
+      <div className="hero-actions">
+        <button className="primary-button" type="button" onClick={onReview}>
+          <ShieldCheck aria-hidden="true" />
+          Review Answers
+        </button>
+        <button className="secondary-button" type="button" onClick={onHome}>
+          <ArrowLeft aria-hidden="true" />
+          Back to Missions
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ImportScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="import-screen">
+      <button className="back-button" type="button" onClick={onBack}>
+        <ArrowLeft aria-hidden="true" />
+        Missions
+      </button>
+      <div className="import-panel">
+        <FileSearch aria-hidden="true" />
+        <p className="eyebrow">PDF Lab</p>
+        <h1>Question import will live here.</h1>
+        <p>
+          The attached CIS-DF PDF is readable enough to extract candidate questions, but the app should review
+          every parsed question before publishing it into the playable bank.
+        </p>
+        <div className="import-steps">
+          <span>1. Extract PDF text</span>
+          <span>2. Review questions</span>
+          <span>3. Publish to modes</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function QuestionMeta({ question, questionNumber }: { question: Question; questionNumber: number }) {
+  return (
+    <div className="question-meta">
+      <span>Question {questionNumber} / {questions.length}</span>
+      <span>{question.domain}</span>
+      <span>{question.difficulty}</span>
     </div>
+  );
+}
+
+function QuestionPager({
+  index,
+  onMove,
+  onJump,
+  answered,
+}: {
+  index: number;
+  onMove: (direction: -1 | 1) => void;
+  onJump: (index: number) => void;
+  answered: AnswerState;
+}) {
+  return (
+    <nav className="question-pager" aria-label="Question navigation">
+      <button type="button" onClick={() => onMove(-1)} disabled={index === 0} title="Previous question">
+        <ChevronLeft aria-hidden="true" />
+      </button>
+      <div className="dot-track">
+        {questions.map((question, questionIndex) => (
+          <button
+            key={question.id}
+            className={[
+              "question-dot",
+              questionIndex === index ? "active" : "",
+              answered[question.id] !== undefined ? "answered" : "",
+            ].join(" ")}
+            type="button"
+            onClick={() => onJump(questionIndex)}
+            aria-label={`Go to question ${questionIndex + 1}`}
+          />
+        ))}
+      </div>
+      <button type="button" onClick={() => onMove(1)} disabled={index === questions.length - 1} title="Next question">
+        <ChevronRight aria-hidden="true" />
+      </button>
+    </nav>
+  );
+}
+
+function PlayerStat({ icon: Icon, value, label }: { icon: typeof Flame; value: string; label: string }) {
+  return (
+    <span className="player-stat">
+      <Icon aria-hidden="true" />
+      <strong>{value}</strong>
+      <small>{label}</small>
+    </span>
+  );
+}
+
+function Intel({ icon: Icon, label, value }: { icon: typeof FileSearch; label: string; value: string }) {
+  return (
+    <span className="intel-item">
+      <Icon aria-hidden="true" />
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </span>
   );
 }
